@@ -10,11 +10,11 @@ import android.view.WindowManager.LayoutParams
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.opencv.android.CameraBridgeViewBase
 import org.opencv.android.JavaCameraView
 import org.opencv.android.OpenCVLoader
-import org.opencv.android.CameraBridgeViewBase
-import org.opencv.core.CvType
-import org.opencv.core.Mat
+import org.opencv.core.*
+import org.opencv.imgproc.Imgproc
 
 val Any.TAG: String
     get() {
@@ -28,11 +28,20 @@ private val REQUIRED_PERMISSIONS = arrayOf(
     Manifest.permission.CAMERA,
 )
 
-class MainActivity : AppCompatActivity(), CameraBridgeViewBase.CvCameraViewListener2 {
+class MainActivity : AppCompatActivity(),
+    CameraBridgeViewBase.CvCameraViewListener2 {
 
     private val viewFinder by lazy { findViewById<JavaCameraView>(R.id.camera_view) }
 
-    lateinit var imageMat: Mat
+    private var height: Int = 0
+    private var width: Int = 0
+    private var mRgba = Mat(0, 0, CvType.CV_8UC4)
+
+    companion object {
+        init {
+            System.loadLibrary("opencv_java4")
+        }
+    }
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
@@ -105,19 +114,48 @@ class MainActivity : AppCompatActivity(), CameraBridgeViewBase.CvCameraViewListe
         }
     }
 
-    override fun onCameraViewStarted(width: Int, height: Int) {
-        Log.d(TAG, "width: $width, height: $height")
-        imageMat = Mat(width, height, CvType.CV_8UC4)
+    override fun onCameraViewStarted(w: Int, h: Int) {
+        width = w
+        height = h
+        Log.d(TAG, "onCameraViewStarted() width: $width, height: $height")
+        mRgba = Mat(width, height, CvType.CV_8UC4)
+        mGray = Mat(width, height, CvType.CV_8UC1)
+
     }
 
     override fun onCameraViewStopped() {
         Log.d(TAG, "onCameraViewStopped()")
-        imageMat.release()
+        mRgba.release()
     }
+
+    private var mGray = Mat()
+    private var mContours: MutableList<MatOfPoint> = mutableListOf()
+    private var mHierarchy = Mat()
 
     override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
         Log.v(TAG, "onCameraFrame()")
-        imageMat = inputFrame!!.rgba()
-        return imageMat
+        mRgba = inputFrame!!.rgba()
+        Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY, 1)
+
+        val threshold = Scalar(125.0)
+        val maxPossible = Scalar(255.0)
+        Core.inRange(mGray, threshold, maxPossible, mGray)
+
+        mContours.clear()
+        Imgproc.findContours(
+            mGray,
+            mContours,
+            mHierarchy,
+            Imgproc.RETR_EXTERNAL,
+            Imgproc.CHAIN_APPROX_SIMPLE
+        )
+
+        Log.v(TAG, "contours: " + mContours.size.toString())
+
+        val color = Scalar(255.0, 0.0, 0.0, 0.0)
+        val drawAll = -1
+        Imgproc.drawContours(mRgba, mContours, drawAll, color)
+        return mRgba
     }
+
 }
