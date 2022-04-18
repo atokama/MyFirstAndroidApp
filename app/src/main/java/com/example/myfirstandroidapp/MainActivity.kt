@@ -35,7 +35,6 @@ class MainActivity : AppCompatActivity(),
 
     private var height: Int = 0
     private var width: Int = 0
-    private var mRgba = Mat(0, 0, CvType.CV_8UC4)
 
     companion object {
         init {
@@ -114,6 +113,9 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+
+    private var mRgba = Mat(0, 0, CvType.CV_8UC4)
+
     override fun onCameraViewStarted(w: Int, h: Int) {
         width = w
         height = h
@@ -152,9 +154,12 @@ class MainActivity : AppCompatActivity(),
 
         Log.v(TAG, "contours: " + mContours.size.toString())
 
-        val color = Scalar(255.0, 0.0, 0.0, 0.0)
-        val drawAll = -1
-        Imgproc.drawContours(mRgba, mContours, drawAll, color)
+        val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color
+        val thickness = 3
+        val contourIdx = -1 // -1 to draw all contours
+        Imgproc.drawContours(mRgba, mContours, contourIdx, color, thickness)
+
+        Log.v(TAG, "mRgba.size: " + mRgba.size().toString())
         return mRgba
     }
 
