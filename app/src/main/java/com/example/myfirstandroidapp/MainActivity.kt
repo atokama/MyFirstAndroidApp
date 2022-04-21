@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.SurfaceView
 import android.view.WindowManager.LayoutParams
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -15,6 +16,7 @@ import org.opencv.android.JavaCameraView
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
+import java.util.*
 
 val Any.TAG: String
     get() {
@@ -31,7 +33,9 @@ private val REQUIRED_PERMISSIONS = arrayOf(
 class MainActivity : AppCompatActivity(),
     CameraBridgeViewBase.CvCameraViewListener2 {
 
-    private val viewFinder by lazy { findViewById<JavaCameraView>(R.id.camera_view) }
+    private val viewFinder by lazy { findViewById<JavaCameraView>(R.id.cameraPreview) }
+    private val tvFrameSize by lazy { findViewById<TextView>(R.id.tvFrameSize) }
+    private val tvFps by lazy { findViewById<TextView>(R.id.tvFps) }
 
     private var height: Int = 0
     private var width: Int = 0
@@ -119,7 +123,9 @@ class MainActivity : AppCompatActivity(),
     override fun onCameraViewStarted(w: Int, h: Int) {
         width = w
         height = h
-        Log.d(TAG, "onCameraViewStarted() width: $width, height: $height")
+        tvFrameSize.text = "${w}x${h}"
+        Log.d(TAG, "onCameraViewStarted() ${tvFrameSize.text}")
+
         mRgba = Mat(width, height, CvType.CV_8UC4)
         mGray = Mat(width, height, CvType.CV_8UC1)
 
@@ -134,15 +140,28 @@ class MainActivity : AppCompatActivity(),
     private var mContours: MutableList<MatOfPoint> = mutableListOf()
     private var mHierarchy = Mat()
 
+    private var framesCount: Int = 0
+    private var timer = kotlin.concurrent.fixedRateTimer("timer", true, Date(), 500L) {
+        runOnUiThread {
+            Log.d(TAG, "timer")
+            val fps = framesCount * 2
+            framesCount = 0
+            val msPerFrame = 1000.0 / fps.toDouble()
+            tvFps.text = "${fps} ${msPerFrame.toInt()}.0"
+        }
+    }
+
     override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
         Log.v(TAG, "onCameraFrame()")
+
+        framesCount += 1
+
         mRgba = inputFrame!!.rgba()
         Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY, 1)
 
         val threshold = Scalar(125.0)
         val maxPossible = Scalar(255.0)
         Core.inRange(mGray, threshold, maxPossible, mGray)
-
         mContours.clear()
         Imgproc.findContours(
             mGray,
