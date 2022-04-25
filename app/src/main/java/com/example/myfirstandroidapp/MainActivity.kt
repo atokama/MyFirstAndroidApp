@@ -144,16 +144,14 @@ class MainActivity : AppCompatActivity(),
     private var timer = kotlin.concurrent.fixedRateTimer("timer", true, Date(), 500L) {
         runOnUiThread {
             Log.d(TAG, "timer")
-            val fps = framesCount * 2
+            val fps = 2.0 * framesCount.toDouble()
             framesCount = 0
-            val msPerFrame = 1000.0 / fps.toDouble()
-            tvFps.text = "${fps} ${msPerFrame.toInt()}.0"
+            tvFps.text = "${fps.toInt()} ${(1000.0 / fps).toInt()}.0"
         }
     }
 
     override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
         Log.v(TAG, "onCameraFrame()")
-
         framesCount += 1
 
         mRgba = inputFrame!!.rgba()
