@@ -18,13 +18,6 @@ import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 import java.util.*
 
-val Any.TAG: String
-    get() {
-        val tag = javaClass.simpleName
-        val length = 23
-        return if (tag.length <= length) tag else tag.substring(0, length)
-    }
-
 private const val REQUEST_CODE_PERMISSIONS = 111
 private val REQUIRED_PERMISSIONS = arrayOf(
     Manifest.permission.CAMERA,
@@ -33,7 +26,7 @@ private val REQUIRED_PERMISSIONS = arrayOf(
 class MainActivity : AppCompatActivity(),
     CameraBridgeViewBase.CvCameraViewListener2 {
 
-    private val viewFinder by lazy { findViewById<JavaCameraView>(R.id.cameraPreview) }
+    private val cameraPreview by lazy { findViewById<JavaCameraView>(R.id.cameraPreview) }
     private val tvFrameSize by lazy { findViewById<TextView>(R.id.tvFrameSize) }
     private val tvFps by lazy { findViewById<TextView>(R.id.tvFps) }
 
@@ -63,9 +56,9 @@ class MainActivity : AppCompatActivity(),
         window.addFlags(LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
 
-        viewFinder.visibility = SurfaceView.VISIBLE
-        viewFinder.setCameraIndex(CameraCharacteristics.LENS_FACING_FRONT)
-        viewFinder.setCvCameraViewListener(this)
+        cameraPreview.visibility = SurfaceView.VISIBLE
+        cameraPreview.setCameraIndex(CameraCharacteristics.LENS_FACING_FRONT)
+        cameraPreview.setCvCameraViewListener(this)
 
         // Request camera permissions
         if (permissionsGranted()) {
@@ -77,9 +70,9 @@ class MainActivity : AppCompatActivity(),
 
     private fun enableCameraView() {
         Log.d(TAG, "enableCameraView()")
-        viewFinder.setCameraPermissionGranted()
+        cameraPreview.setCameraPermissionGranted()
         initOpenCv()
-        viewFinder.enableView()
+        cameraPreview.enableView()
     }
 
     override fun onRequestPermissionsResult(
@@ -100,12 +93,12 @@ class MainActivity : AppCompatActivity(),
 
     override fun onPause() {
         super.onPause()
-        viewFinder?.let { viewFinder.disableView() }
+        cameraPreview?.let { cameraPreview.disableView() }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        viewFinder?.let { viewFinder.disableView() }
+        cameraPreview?.let { cameraPreview.disableView() }
     }
 
     private fun initOpenCv() {
@@ -118,66 +111,88 @@ class MainActivity : AppCompatActivity(),
     }
 
 
-    private var mRgba = Mat(0, 0, CvType.CV_8UC4)
-
-    override fun onCameraViewStarted(w: Int, h: Int) {
-        width = w
-        height = h
-        tvFrameSize.text = "${w}x${h}"
-        Log.d(TAG, "onCameraViewStarted() ${tvFrameSize.text}")
-
-        mRgba = Mat(width, height, CvType.CV_8UC4)
-        mGray = Mat(width, height, CvType.CV_8UC1)
-
-    }
+    private var frame = Mat()
+    private val chain = Filter.Chain<Mat>(Mat())
+    private val builder = Filter.Chain.Builder<Mat>(chain)
 
     override fun onCameraViewStopped() {
         Log.d(TAG, "onCameraViewStopped()")
-        mRgba.release()
+        frame.release()
     }
 
-    private var mGray = Mat()
-    private var mContours: MutableList<MatOfPoint> = mutableListOf()
-    private var mHierarchy = Mat()
-
     private var framesCount: Int = 0
-    private var timer = kotlin.concurrent.fixedRateTimer("timer", true, Date(), 500L) {
-        runOnUiThread {
-            Log.d(TAG, "timer")
-            val fps = 2.0 * framesCount.toDouble()
-            framesCount = 0
-            tvFps.text = "${fps.toInt()} ${(1000.0 / fps).toInt()}.0"
+    private val timer =
+        kotlin.concurrent.fixedRateTimer("timer", true, Date(), 500L) {
+            runOnUiThread {
+                Log.d(TAG, "timer")
+                val fps = 2.0 * framesCount.toDouble()
+                framesCount = 0
+                tvFps.text = "${fps.toInt()} ${(1000.0 / fps).toInt()}.0"
+            }
+        }
+
+    override fun onCameraViewStarted(w: Int, h: Int) {
+        tvFrameSize.text = "${w}x${h}"
+        Log.d(TAG, "onCameraViewStarted() ${tvFrameSize.text}")
+
+        width = w
+        height = h
+        frame = Mat(width, height, CvType.CV_8UC4)
+
+        builder.add(Mat()) { data, result ->
+            Log.v(TAG, "Imgproc.cvtColor() data:${data.print()} result:${result.print()}")
+            Imgproc.cvtColor(data, result, Imgproc.COLOR_RGBA2GRAY)
+        }
+
+        builder.add(Mat()) { data, result ->
+            Log.v(TAG, "Core.inRange() data:${data.print()} result:${result.print()}")
+            val threshold = Scalar(125.0)
+            val maxPossible = Scalar(255.0)
+            Core.inRange(data, threshold, maxPossible, result)
+        }
+
+        builder.add(frame) { data, result ->
+            Log.v(TAG, "Imgproc.findContours() data:${data.print()}")
+            val contours: MutableList<MatOfPoint> = mutableListOf()
+            val hierarchy = Mat()
+            Imgproc.findContours(
+                data,
+                contours,
+                hierarchy,
+                Imgproc.RETR_EXTERNAL,
+                Imgproc.CHAIN_APPROX_SIMPLE
+            )
+            Log.v(TAG, "contours: ${contours.size}")
+
+            val conversion = Imgproc.COLOR_GRAY2RGBA
+            Log.v(TAG, "Imgproc.cvtColor() result:${result.print()}")
+            Imgproc.cvtColor(result, result, conversion)
+
+            Log.v(TAG, "Imgproc.drawContours() result:${result.print()}")
+            val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color
+            val thickness = 3
+            val contourIdx = -1 // -1 to draw all contours
+            Imgproc.drawContours(result, contours, contourIdx, color, thickness)
+            Log.v(TAG, "contours drawn")
         }
     }
 
-    override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
-        Log.v(TAG, "onCameraFrame()")
+    override fun onCameraFrame(input: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
         framesCount += 1
+        frame = input!!.rgba()
+        Log.v(TAG, "onCameraFrame() before: ${frame.print()}")
 
-        mRgba = inputFrame!!.rgba()
-        Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY, 1)
+        with(chain.filters.last()) {
+            output = frame
+            prev?.output = frame
+        }
 
-        val threshold = Scalar(125.0)
-        val maxPossible = Scalar(255.0)
-        Core.inRange(mGray, threshold, maxPossible, mGray)
-        mContours.clear()
-        Imgproc.findContours(
-            mGray,
-            mContours,
-            mHierarchy,
-            Imgproc.RETR_EXTERNAL,
-            Imgproc.CHAIN_APPROX_SIMPLE
-        )
+        with(chain.filters.first()) {
+            process(frame)
+        }
 
-        Log.v(TAG, "contours: " + mContours.size.toString())
-
-        val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color
-        val thickness = 3
-        val contourIdx = -1 // -1 to draw all contours
-        Imgproc.drawContours(mRgba, mContours, contourIdx, color, thickness)
-
-        Log.v(TAG, "mRgba.size: " + mRgba.size().toString())
-        return mRgba
+        Log.v(TAG, "after: ${frame.print()}")
+        return frame
     }
 
 }

@@ -1,7 +1,13 @@
 package com.example.myfirstandroidapp
 
+import android.util.Log
+
 class Filter {
-    abstract class Node<T>(protected var result: T) {
+    abstract class Node<T>(var output: T) {
+        init {
+            Log.v(TAG, "init()")
+        }
+
         var next: Node<T>? = null
         var prev: Node<T>? = null
         var enabled: Boolean = true
@@ -10,8 +16,9 @@ class Filter {
 
         fun process(data: T): T {
             return if (enabled) {
-                result = doProcess(data)
-                next?.process(result) ?: result
+                Log.v(TAG, "process()")
+                output = doProcess(data)
+                next?.process(output) ?: output
             } else data
         }
     }
@@ -30,10 +37,7 @@ class Filter {
             result: T,
             private val func: (T) -> T
         ) : Filter.Node<T>(result) {
-            override fun doProcess(data: T): T {
-                result = func(data)
-                return result
-            }
+            override fun doProcess(data: T): T = func(data)
         }
 
         private class F2<T>(
@@ -41,13 +45,11 @@ class Filter {
             private val func: (T, T) -> Unit
         ) : Filter.Node<T>(result) {
             override fun doProcess(data: T): T {
-                func(data, result)
-                return result
+                func(data, output)
+                return output
             }
         }
-
     }
-
 
     class Chain<T>(result: T) : Node<T>(result) {
         val filters: MutableList<Node<T>> = mutableListOf()
@@ -67,6 +69,11 @@ class Filter {
         class Builder<T>(private val chain: Chain<T>) {
 
             fun add(data: T, filter: (T) -> T): Node<T> {
+                val node = Factory<T>().create(data, filter)
+                return chain.add(node)
+            }
+
+            fun add(data: T, filter: (T, T) -> Unit): Node<T> {
                 val node = Factory<T>().create(data, filter)
                 return chain.add(node)
             }
