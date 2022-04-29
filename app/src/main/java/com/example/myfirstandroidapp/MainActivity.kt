@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.os.Bundle
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.SurfaceView
 import android.view.WindowManager.LayoutParams
 import android.widget.TextView
@@ -16,6 +18,7 @@ import org.opencv.android.JavaCameraView
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
+import java.lang.Math.abs
 import java.util.*
 
 private const val REQUEST_CODE_PERMISSIONS = 111
@@ -25,6 +28,47 @@ private val REQUIRED_PERMISSIONS = arrayOf(
 
 class MainActivity : AppCompatActivity(),
     CameraBridgeViewBase.CvCameraViewListener2 {
+
+    private val onSwipeListener = object {
+        fun onSwipeTop() {
+            Log.v(TAG, "gesture:onSwipeTop()")
+        }
+
+        fun onSwipeBottom() {
+            Log.v(TAG, "gesture:onSwipeBottom()")
+        }
+
+        fun onSwipeLeft() {
+            Log.v(TAG, "gesture:onSwipeLeft()")
+        }
+
+        fun onSwipeRight() {
+            Log.v(TAG, "gesture:onSwipeRight()")
+        }
+    }
+
+    private val onGestureListener = object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent): Boolean = true
+
+        override fun onFling(
+            e1: MotionEvent?, e2: MotionEvent?, velocityX: Float, velocityY: Float
+        ): Boolean {
+            with(onSwipeListener) {
+                if (abs(velocityX) > abs(velocityY))
+                    if (velocityX > 0) onSwipeRight() else onSwipeLeft()
+                else
+                    if (velocityY > 0) onSwipeBottom() else onSwipeTop()
+            }
+            return super.onFling(e1, e2, velocityX, velocityY)
+        }
+    }
+
+    private val gestureDetector = GestureDetector(baseContext, onGestureListener)
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(event)
+        return super.onTouchEvent(event)
+    }
 
     private val cameraPreview by lazy { findViewById<JavaCameraView>(R.id.cameraPreview) }
     private val tvFrameSize by lazy { findViewById<TextView>(R.id.tvFrameSize) }
@@ -194,5 +238,6 @@ class MainActivity : AppCompatActivity(),
         Log.v(TAG, "after: ${frame.print()}")
         return frame
     }
+
 
 }

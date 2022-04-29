@@ -25,7 +25,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyFirstAndroidApp">
         <activity
-            android:name="MainActivity"
+            android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation"
             android:exported="true"
             android:screenOrientation="landscape">
