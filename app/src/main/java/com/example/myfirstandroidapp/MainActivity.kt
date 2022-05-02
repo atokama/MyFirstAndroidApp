@@ -39,11 +39,12 @@ class MainActivity : AppCompatActivity(),
         }
 
         fun onSwipeLeft() {
-            Log.v(TAG, "gesture:onSwipeLeft()")
-        }
+            threshold.`val`[0] -=10.0
+            Log.v(TAG, "gesture:onSwipeLeft() ${threshold.`val`[0]}")}
 
         fun onSwipeRight() {
-            Log.v(TAG, "gesture:onSwipeRight()")
+            threshold.`val`[0] += 10.0
+            Log.v(TAG, "gesture:onSwipeRight() ${threshold.`val`[0]}")
         }
     }
 
@@ -174,6 +175,8 @@ class MainActivity : AppCompatActivity(),
                 tvFps.text = "${fps.toInt()} ${(1000.0 / fps).toInt()}.0"
             }
         }
+    var threshold = Scalar(125.0)
+    val maxPossible = Scalar(255.0)
 
     override fun onCameraViewStarted(w: Int, h: Int) {
         tvFrameSize.text = "${w}x${h}"
@@ -183,19 +186,19 @@ class MainActivity : AppCompatActivity(),
         height = h
         frame = Mat(width, height, CvType.CV_8UC4)
 
-        builder.add(Mat()) { data, result ->
+        builder.add(frame.clone()) { data, result ->
             Log.v(TAG, "Imgproc.cvtColor() data:${data.print()} result:${result.print()}")
             Imgproc.cvtColor(data, result, Imgproc.COLOR_RGBA2GRAY)
         }
 
-        builder.add(Mat()) { data, result ->
+        builder.add(frame.clone()) { data, result ->
             Log.v(TAG, "Core.inRange() data:${data.print()} result:${result.print()}")
-            val threshold = Scalar(125.0)
-            val maxPossible = Scalar(255.0)
+
+
             Core.inRange(data, threshold, maxPossible, result)
         }
 
-        builder.add(frame) { data, result ->
+        builder.add(frame.clone()) { data, result ->
             Log.v(TAG, "Imgproc.findContours() data:${data.print()}")
             val contours: MutableList<MatOfPoint> = mutableListOf()
             val hierarchy = Mat()
@@ -208,9 +211,9 @@ class MainActivity : AppCompatActivity(),
             )
             Log.v(TAG, "contours: ${contours.size}")
 
-            val conversion = Imgproc.COLOR_GRAY2RGBA
-            Log.v(TAG, "Imgproc.cvtColor() result:${result.print()}")
-            Imgproc.cvtColor(result, result, conversion)
+//            val conversion = Imgproc.COLOR_GRAY2RGBA
+//            Log.v(TAG, "Imgproc.cvtColor() result:${result.print()}")
+//            Imgproc.cvtColor(result, result, conversion)
 
             Log.v(TAG, "Imgproc.drawContours() result:${result.print()}")
             val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color
@@ -227,8 +230,9 @@ class MainActivity : AppCompatActivity(),
         Log.v(TAG, "onCameraFrame() before: ${frame.print()}")
 
         with(chain.filters.last()) {
-            output = frame
-            prev?.output = frame
+            setOutput(frame)
+            //     prev?.setOutput(frame)
+
         }
 
         with(chain.filters.first()) {
