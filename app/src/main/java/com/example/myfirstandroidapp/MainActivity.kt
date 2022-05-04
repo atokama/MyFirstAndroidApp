@@ -29,18 +29,22 @@ private val REQUIRED_PERMISSIONS = arrayOf(
 class MainActivity : AppCompatActivity(),
     CameraBridgeViewBase.CvCameraViewListener2 {
 
+    private var viewMode = 0
     private val onSwipeListener = object {
         fun onSwipeTop() {
-            Log.v(TAG, "gesture:onSwipeTop()")
+            viewMode += 1
+            Log.v(TAG, "gesture:onSwipeTop() viewMode:$viewMode")
         }
 
         fun onSwipeBottom() {
-            Log.v(TAG, "gesture:onSwipeBottom()")
+            viewMode -= 1
+            Log.v(TAG, "gesture:onSwipeBottom() viewMode:$viewMode")
         }
 
         fun onSwipeLeft() {
-            threshold.`val`[0] -=10.0
-            Log.v(TAG, "gesture:onSwipeLeft() ${threshold.`val`[0]}")}
+            threshold.`val`[0] -= 10.0
+            Log.v(TAG, "gesture:onSwipeLeft() ${threshold.`val`[0]}")
+        }
 
         fun onSwipeRight() {
             threshold.`val`[0] += 10.0
@@ -155,10 +159,18 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    class Image(
+        var pixels: Mat = Mat(),
+        val contours: MutableList<MatOfPoint> = mutableListOf()
+    ) {
+        fun clone(): Image = Image(pixels = pixels.clone(), contours = contours.toMutableList())
+        fun release() = pixels.release()
+        fun print() = "contours: $contours, pixels: ${pixels.print()}"
+    }
 
-    private var frame = Mat()
-    private val chain = Filter.Chain<Mat>(Mat())
-    private val builder = Filter.Chain.Builder<Mat>(chain)
+    private var frame = Image()
+    private val chain = Filter.Chain<Image>(frame.clone())
+    private val builder = Filter.Chain.Builder<Image>(chain)
 
     override fun onCameraViewStopped() {
         Log.d(TAG, "onCameraViewStopped()")
@@ -184,63 +196,83 @@ class MainActivity : AppCompatActivity(),
 
         width = w
         height = h
-        frame = Mat(width, height, CvType.CV_8UC4)
+        frame = Image(pixels = Mat(width, height, CvType.CV_8UC4))
 
         builder.add(frame.clone()) { data, result ->
-            Log.v(TAG, "Imgproc.cvtColor() data:${data.print()} result:${result.print()}")
-            Imgproc.cvtColor(data, result, Imgproc.COLOR_RGBA2GRAY)
+            convertColor(data, Imgproc.COLOR_RGBA2GRAY, result)
         }
 
         builder.add(frame.clone()) { data, result ->
             Log.v(TAG, "Core.inRange() data:${data.print()} result:${result.print()}")
-
-
-            Core.inRange(data, threshold, maxPossible, result)
+            Core.inRange(data.pixels, threshold, maxPossible, result.pixels)
         }
 
         builder.add(frame.clone()) { data, result ->
             Log.v(TAG, "Imgproc.findContours() data:${data.print()}")
-            val contours: MutableList<MatOfPoint> = mutableListOf()
+            result.contours.clear()
             val hierarchy = Mat()
             Imgproc.findContours(
-                data,
-                contours,
+                data.pixels,
+                result.contours,
                 hierarchy,
                 Imgproc.RETR_EXTERNAL,
                 Imgproc.CHAIN_APPROX_SIMPLE
             )
-            Log.v(TAG, "contours: ${contours.size}")
-
-//            val conversion = Imgproc.COLOR_GRAY2RGBA
-//            Log.v(TAG, "Imgproc.cvtColor() result:${result.print()}")
-//            Imgproc.cvtColor(result, result, conversion)
-
-            Log.v(TAG, "Imgproc.drawContours() result:${result.print()}")
-            val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color
-            val thickness = 3
-            val contourIdx = -1 // -1 to draw all contours
-            Imgproc.drawContours(result, contours, contourIdx, color, thickness)
-            Log.v(TAG, "contours drawn")
         }
+
+        builder.add(frame.clone()) { data, result ->
+            convertColor(data, Imgproc.COLOR_GRAY2RGBA, result)
+        }
+
+        builder.add(frame.clone()) { data, result ->
+            Log.v(TAG, "Imgproc.drawContours() ${data.contours} result:${result.print()}")
+            val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color (RGBA)
+            val thickness = 3
+            val contourIdx = -1 // draw all contours
+            Imgproc.drawContours(result.pixels, data.contours, contourIdx, color, thickness)
+        }
+
     }
 
     override fun onCameraFrame(input: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
         framesCount += 1
-        frame = input!!.rgba()
+        frame.pixels = input!!.rgba()
         Log.v(TAG, "onCameraFrame() before: ${frame.print()}")
 
-        with(chain.filters.last()) {
-            setOutput(frame)
-            //     prev?.setOutput(frame)
-
+        when (viewMode) {
+            1 -> {
+                Log.v(TAG, "viewMode: contours over binary (gray) image")
+                chain.filters.forEach {
+                    it.setOutput(frame)
+                }
+                with(chain.filters.last()) {
+                    prev!!.enabled = true
+                }
+            }
+            else -> {
+                Log.v(TAG, "viewMode: contours over original image")
+                with(chain.filters.last()) {
+                    setOutput(frame)
+                    prev!!.enabled = false
+                }
+            }
         }
-
         with(chain.filters.first()) {
             process(frame)
         }
 
         Log.v(TAG, "after: ${frame.print()}")
-        return frame
+        return frame.pixels
+    }
+
+
+    private fun convertColor(
+        data: Image,
+        conversionType: Int,
+        result: Image
+    ) {
+        Log.v(TAG, "Imgproc.cvtColor() conversion:$conversionType result:${result.print()}")
+        Imgproc.cvtColor(data.pixels, result.pixels, conversionType)
     }
 
 
