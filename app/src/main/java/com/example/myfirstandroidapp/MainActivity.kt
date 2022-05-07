@@ -41,14 +41,14 @@ class MainActivity : AppCompatActivity(),
             Log.v(TAG, "gesture:onSwipeBottom() viewMode:$viewMode")
         }
 
+        val SWIPE_HORIZONTAL = 1.2
         fun onSwipeLeft() {
-            threshold.`val`[0] -= 10.0
-            Log.v(TAG, "gesture:onSwipeLeft() ${threshold.`val`[0]}")
+            threshold /= SWIPE_HORIZONTAL
+            Log.v(TAG, "gesture:onSwipeLeft() $threshold")
         }
-
         fun onSwipeRight() {
-            threshold.`val`[0] += 10.0
-            Log.v(TAG, "gesture:onSwipeRight() ${threshold.`val`[0]}")
+            threshold *= SWIPE_HORIZONTAL
+            Log.v(TAG, "gesture:onSwipeRight() $threshold")
         }
     }
 
@@ -161,7 +161,8 @@ class MainActivity : AppCompatActivity(),
 
     class Image(
         var pixels: Mat = Mat(),
-        val contours: MutableList<MatOfPoint> = mutableListOf()
+        val contours: MutableList<MatOfPoint> = mutableListOf(),
+        var hierarchy: Mat = Mat(),
     ) {
         fun clone(): Image = Image(pixels = pixels.clone(), contours = contours.toMutableList())
         fun release() = pixels.release()
@@ -187,7 +188,7 @@ class MainActivity : AppCompatActivity(),
                 tvFps.text = "${fps.toInt()} ${(1000.0 / fps).toInt()}.0"
             }
         }
-    var threshold = Scalar(125.0)
+    var threshold = 125.0
     val maxPossible = Scalar(255.0)
 
     override fun onCameraViewStarted(w: Int, h: Int) {
@@ -203,18 +204,19 @@ class MainActivity : AppCompatActivity(),
         }
 
         builder.add(frame.clone()) { data, result ->
-            Log.v(TAG, "Core.inRange() data:${data.print()} result:${result.print()}")
-            Core.inRange(data.pixels, threshold, maxPossible, result.pixels)
+            Log.v(TAG, "Core.Canny() threshold:$threshold")
+            Imgproc.Canny(data.pixels, result.pixels, threshold, 2.0 * threshold)
         }
 
         builder.add(frame.clone()) { data, result ->
-            Log.v(TAG, "Imgproc.findContours() data:${data.print()}")
+            Log.v(TAG, "Imgproc.findContours()")
             result.contours.clear()
-            val hierarchy = Mat()
+            result.hierarchy = Mat()
+
             Imgproc.findContours(
                 data.pixels,
                 result.contours,
-                hierarchy,
+                result.hierarchy,
                 Imgproc.RETR_EXTERNAL,
                 Imgproc.CHAIN_APPROX_SIMPLE
             )
@@ -225,7 +227,7 @@ class MainActivity : AppCompatActivity(),
         }
 
         builder.add(frame.clone()) { data, result ->
-            Log.v(TAG, "Imgproc.drawContours() ${data.contours} result:${result.print()}")
+            Log.v(TAG, "Imgproc.drawContours()")
             val color = Scalar(255.0, 0.0, 0.0, 0.0) // red color (RGBA)
             val thickness = 3
             val contourIdx = -1 // draw all contours

@@ -54,14 +54,6 @@ class FilterTest {
         assertEquals(second, third.prev)
     }
 
-    @Test
-    fun pp() {
-        var list: MutableList<Int> = mutableListOf(1, 2, 3)
-        val copy = list.toMutableList()
-        list.clear()
-        assertEquals(mutableListOf(1,2,3), copy)
-    }
-
 //    @Test
 //    fun process() {
 //        builder.add(0) { n, m -> }
